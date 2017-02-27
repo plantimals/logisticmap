@@ -4,8 +4,8 @@ import (
 	"image"
 	"image/color"
 	"image/gif"
+	"io"
 	"log"
-	"os"
 	"sync"
 )
 
@@ -76,29 +76,26 @@ func (lm *LogisicMap) Parallelism(p int) {
 	lm.parallelism = p
 }
 
-func (lm *LogisicMap) GetFrame(start float64, stop float64, step float64) {
+func (lm *LogisicMap) GetFrame(writer io.Writer, start float64, stop float64, step float64) {
 
 	slices := make(map[int]*VSlice)
 	var fanout []<-chan *VSlice
 
-	regions := paramGen(XSTART, XSTOP, XSTEP)
+	regions := paramGen(start, stop, step)
 
 	for i := 0; i < parallelism; i++ {
-		fanout = append(fanout, iterateGen(regions))
+		fanout = append(fanout, iterateGen(regions, burnIn, take))
 	}
 	log.Printf("fanout size: %v", len(fanout))
 	for vslice := range fanin(fanout) {
 		slices[vslice.idx] = vslice
 	}
 
-	img := image.NewPaletted(image.Rect(0, 0, x_dim, y_dim), palette)
+	img := image.NewPaletted(image.Rect(0, 0, lm.x_dim, lm.y_dim), palette)
 	var images []*image.Paletted
 	fillImage(slices, img)
 	images = append(images, img)
-	output, err := os.OpenFile("test.gif", os.O_WRONLY|os.O_CREATE, 0600)
-	handle(err)
-	defer output.Close()
-	gif.EncodeAll(output, &gif.GIF{
+	gif.EncodeAll(writer, &gif.GIF{
 		Image: images,
 		Delay: []int{1},
 	})
@@ -146,7 +143,6 @@ func paramGen(start float64, stop float64, step float64) <-chan *VSlice {
 	out := make(chan *VSlice)
 	go func() {
 		sliceCount := int((stop - start) / step)
-		log.Printf("sliceCount: %v", sliceCount)
 		for i := 0; i < sliceCount; i++ {
 			p := start + (float64(i) * step)
 			out <- newVSlice(i, p)
@@ -156,11 +152,11 @@ func paramGen(start float64, stop float64, step float64) <-chan *VSlice {
 	return out
 }
 
-func iterateGen(in <-chan *VSlice) <-chan *VSlice {
+func iterateGen(in <-chan *VSlice, burnIn int, take int) <-chan *VSlice {
 	out := make(chan *VSlice)
 	go func() {
 		for vslice := range in {
-			iterate(vslice)
+			iterate(vslice, brunIn, take)
 			out <- vslice
 		}
 		close(out)
@@ -168,13 +164,13 @@ func iterateGen(in <-chan *VSlice) <-chan *VSlice {
 	return out
 }
 
-func iterate(vslice *VSlice) {
+func iterate(vslice *VSlice, burnIn int, take int) {
 	var x = float64(0.7)
 	param := vslice.param
-	for i := 0; i < BURN_IN; i++ {
+	for i := 0; i < burnIn; i++ {
 		x = (param * x) * (1 - x)
 	}
-	for i := 0; i < TAKE; i++ {
+	for i := 0; i < take; i++ {
 		x = (param * x) * (1 - x)
 		vslice.levels[i] = x
 	}
