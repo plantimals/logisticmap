@@ -1,3 +1,4 @@
-logisticmap
 *.gif
 *.sw?
+.DS_Store
+animateLogMap

@@ -37,6 +37,8 @@ type LogisicMap struct {
 	x_dim       int
 	y_dim       int
 	parallelism int
+	xRes        int
+	yRes        int
 }
 
 const (
@@ -45,10 +47,12 @@ const (
 	parallelism = 8
 )
 
-func NewLogisticMap() *LogisicMap {
+func NewLogisticMap(xRes int, yRes int) *LogisicMap {
 	lm := new(LogisicMap)
 	lm.burnIn = burnIn
 	lm.take = take
+	lm.xRes = xRes
+	lm.yRes = yRes
 
 	lm.parallelism = parallelism
 	return lm
@@ -59,32 +63,32 @@ func (lm *LogisicMap) Parallelism(p int) {
 }
 
 func (lm *LogisicMap) GetGIF(writer io.Writer, start float64, stop float64, step float64) {
-	lm.start = start
-	lm.stop = stop
-	lm.step = step
-	lm.x_dim = int(float64((stop - start)) / step)
-	lm.y_dim = int((lm.x_dim * 3) / 4)
-	slices := make(map[int]*VSlice)
-	var fanout []<-chan *VSlice
-
-	regions := paramGen(start, stop, step, lm.take)
-
-	for i := 0; i < lm.parallelism; i++ {
-		fanout = append(fanout, iterateGen(regions, burnIn, take))
-	}
-	log.Printf("fanout size: %v", len(fanout))
-	for vslice := range fanin(fanout) {
-		slices[vslice.idx] = vslice
-	}
-
-	img := image.NewPaletted(image.Rect(0, 0, lm.x_dim, lm.y_dim), palette)
+	img := lm.GetImage(start, stop, step)
 	var images []*image.Paletted
-	lm.fillImage(slices, img)
 	images = append(images, img)
+	lm.WriteGIF(writer, images, []int{1})
+}
+
+func (lm *LogisicMap) WriteGIF(writer io.Writer, images []*image.Paletted, delays []int) {
 	gif.EncodeAll(writer, &gif.GIF{
 		Image: images,
-		Delay: []int{1},
+		Delay: delays,
 	})
+}
+
+type Config struct {
+	Scale       int
+	AspectRatio float64
+	yMin        float64
+	yMax        float64
+	xMin        float64
+	xMax        float64
+}
+
+func (lm *LogisicMap) Pan(writer io.Writer, config *Config, dx float64, dy float64, frames int) {
+	pX := config.AspectRatio * config.Scale
+	pY := scale
+
 }
 
 func (lm *LogisicMap) GetImage(start float64, stop float64, step float64) *image.Paletted {
@@ -101,7 +105,6 @@ func (lm *LogisicMap) GetImage(start float64, stop float64, step float64) *image
 	for i := 0; i < lm.parallelism; i++ {
 		fanout = append(fanout, iterateGen(regions, burnIn, take))
 	}
-	log.Printf("fanout size: %v", len(fanout))
 	for vslice := range fanin(fanout) {
 		slices[vslice.idx] = vslice
 	}
