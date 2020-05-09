@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/gif"
+	"image/png"
 	"io"
 	"log"
 	"sync"
@@ -17,6 +18,7 @@ type Config struct {
 	AspectRatio float64
 	YMin        float64
 	YMax        float64
+	yRange      float64
 	XMin        float64
 	XMax        float64
 	step        float64
@@ -69,20 +71,33 @@ func handle(err error) {
 }
 
 func GetGIF(writer io.Writer, config *Config) {
+	config.yRange = config.YMax - config.YMin
+	config.pX = int(config.AspectRatio * float64(config.Scale))
+	config.pY = int(config.Scale)
+	config.step = (config.XMax - config.XMin) / float64(config.pX)
+
 	img := GetImage(config)
 	var images []*image.Paletted
 	images = append(images, img)
-	WriteGIF(writer, images, []int{1})
-}
-
-func WriteGIF(writer io.Writer, images []*image.Paletted, delays []int) {
 	gif.EncodeAll(writer, &gif.GIF{
 		Image: images,
-		Delay: delays,
 	})
+	log.Printf("completed writing image")
+}
+
+func GetPNG(writer io.Writer, config *Config) {
+	config.yRange = config.YMax - config.YMin
+	config.pX = int(config.AspectRatio * float64(config.Scale))
+	config.pY = int(config.Scale)
+	config.step = (config.XMax - config.XMin) / float64(config.pX)
+
+	img := GetImage(config)
+	png.Encode(writer, img)
+	log.Printf("completed writing image")
 }
 
 func Pan(writer io.Writer, config *Config, dx float64, dy float64, frames int, delay int) {
+	config.yRange = config.YMax - config.YMin
 	config.pX = int(config.AspectRatio * float64(config.Scale))
 	config.pY = int(config.Scale)
 	config.step = (config.XMax - config.XMin) / float64(config.pX)
@@ -124,12 +139,15 @@ func GetImage(config *Config) *image.Paletted {
 }
 
 func fillImage(slices map[int]*VSlice, img *image.Paletted, config *Config) {
+	log.Printf("%v slices\n", len(slices))
+	log.Printf("%v points per slice\n", len(slices[0].levels))
 	yf := float64(config.pY)
 	for x := int(0); x < config.pX; x++ {
 		if _, ok := slices[x]; ok {
 			for _, p := range slices[x].levels {
-				y := int((1 - p) * yf)
-				img.Set(x, y, palette[1])
+				// this line flips the image, shifts it to fit the output, then scales it up
+				y := int((((1 - p) - (1 - config.YMax)) / config.yRange) * yf)
+				img.Set(x, int(y), palette[1])
 			}
 		}
 	}
